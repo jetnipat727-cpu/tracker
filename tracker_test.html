@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ติดตามการเดินทาง</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: sans-serif;
+    background: #f5f5f5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 8px; color: #1a1a1a; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+
+  .card {
+    background: white;
+    border-radius: 12px;
+    border: 0.5px solid #e0e0e0;
+    padding: 20px;
+    width: 100%;
+    max-width: 420px;
+    margin-bottom: 16px;
+  }
+
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #ccc;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .status-dot.active { background: #4CAF50; animation: pulse 1.5s infinite; }
+  .status-dot.error { background: #f44336; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status-text { font-size: 14px; color: #444; vertical-align: middle; }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 0.5px solid #f0f0f0;
+    font-size: 14px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #888; }
+  .info-value { font-weight: 500; color: #1a1a1a; text-align: right; }
+
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn:active { opacity: 0.8; }
+  .btn-start { background: #1a73e8; color: white; }
+  .btn-stop { background: #f44336; color: white; }
+  .btn-disabled { background: #e0e0e0; color: #aaa; cursor: not-allowed; }
+
+  .log-box {
+    background: #fafafa;
+    border-radius: 8px;
+    border: 0.5px solid #e0e0e0;
+    padding: 12px;
+    font-size: 12px;
+    color: #555;
+    max-height: 160px;
+    overflow-y: auto;
+    margin-top: 12px;
+  }
+  .log-item { padding: 3px 0; border-bottom: 0.5px solid #f0f0f0; }
+  .log-item:last-child { border-bottom: none; }
+  .log-ok { color: #2e7d32; }
+  .log-err { color: #c62828; }
+
+  .counter {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 500;
+    color: #1a73e8;
+    margin: 8px 0 4px;
+  }
+  .counter-label { text-align: center; font-size: 12px; color: #888; margin-bottom: 16px; }
+
+  .time-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 16px;
+  }
+  .time-active { background: #e8f5e9; color: #2e7d32; }
+  .time-inactive { background: #fff3e0; color: #e65100; }
+</style>
+</head>
+<body>
+
+<h1>ติดตามการเดินทาง</h1>
+<p class="subtitle">ส่งพิกัดอัตโนมัติทุก 10 วินาที</p>
+
+<div class="card">
+  <div style="margin-bottom:16px;">
+    <span class="status-dot" id="dot"></span>
+    <span class="status-text" id="statusText">รอเริ่มต้น</span>
+  </div>
+
+  <div id="timeBadge" class="time-badge time-inactive">นอกเวลาติดตาม</div>
+
+  <div class="counter" id="counter">0</div>
+  <div class="counter-label">จุดที่ส่งแล้ว</div>
+
+  <div class="info-row">
+    <span class="info-label">Latitude</span>
+    <span class="info-value" id="lat">-</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">Longitude</span>
+    <span class="info-value" id="lng">-</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">ความแม่นยำ</span>
+    <span class="info-value" id="acc">-</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">ส่งล่าสุด</span>
+    <span class="info-value" id="lastSent">-</span>
+  </div>
+</div>
+
+<div class="card" style="max-width:420px; width:100%;">
+  <button class="btn btn-start" id="btnStart" onclick="startTracking()">เริ่มติดตาม</button>
+  <div style="height:10px;"></div>
+  <button class="btn btn-disabled" id="btnStop" onclick="stopTracking()" disabled>หยุดติดตาม</button>
+
+  <div class="log-box" id="logBox">
+    <div class="log-item">รอการเริ่มต้น...</div>
+  </div>
+</div>
+
+<script>
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyngQQ8V1FTJuk8uK1zL3IBXhm5EbXU4uuzgMY8q8qTOkXCbUn2xEjxsg8S_ZPwm4gM/exec';
+const INTERVAL_MS = 10000;
+
+let intervalId = null;
+let watchId = null;
+let sentCount = 0;
+let currentPos = null;
+let isRunning = false;
+
+function isActiveTime() {
+  const now = new Date();
+  const h = now.getHours();
+  return true;
+}
+
+function updateTimeBadge() {
+  const badge = document.getElementById('timeBadge');
+  if (isActiveTime()) {
+    badge.className = 'time-badge time-active';
+    badge.textContent = 'อยู่ในช่วงเวลาติดตาม (6-9 / 17-20)';
+  } else {
+    badge.className = 'time-badge time-inactive';
+    const now = new Date();
+    badge.textContent = 'นอกเวลาติดตาม — ตอนนี้ ' + now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0');
+  }
+}
+
+function addLog(msg, type) {
+  const box = document.getElementById('logBox');
+  const now = new Date();
+  const t = now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  const div = document.createElement('div');
+  div.className = 'log-item ' + (type === 'ok' ? 'log-ok' : type === 'err' ? 'log-err' : '');
+  div.textContent = t + ' — ' + msg;
+  box.insertBefore(div, box.firstChild);
+  if (box.children.length > 30) box.removeChild(box.lastChild);
+}
+
+function setStatus(active, text) {
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+  dot.className = 'status-dot' + (active === 'active' ? ' active' : active === 'error' ? ' error' : '');
+  statusText.textContent = text;
+}
+
+function sendLocation() {
+  if (!currentPos) {
+    addLog('ยังไม่ได้รับพิกัด GPS', 'err');
+    return;
+  }
+
+  if (!isActiveTime()) {
+    addLog('นอกเวลาติดตาม — ไม่ส่ง', '');
+    return;
+  }
+
+  const payload = {
+    timestamp: Date.now(),
+    lat: currentPos.coords.latitude,
+    lng: currentPos.coords.longitude,
+    accuracy: Math.round(currentPos.coords.accuracy)
+  };
+
+  document.getElementById('lat').textContent = payload.lat.toFixed(6);
+  document.getElementById('lng').textContent = payload.lng.toFixed(6);
+  document.getElementById('acc').textContent = payload.accuracy + ' m';
+
+  fetch(SHEET_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(() => {
+    sentCount++;
+    document.getElementById('counter').textContent = sentCount;
+    const now = new Date();
+    document.getElementById('lastSent').textContent =
+      now.getHours() + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+    addLog('ส่งพิกัดสำเร็จ (' + payload.lat.toFixed(5) + ', ' + payload.lng.toFixed(5) + ')', 'ok');
+  }).catch(err => {
+    addLog('ส่งไม่ได้: ' + err.message, 'err');
+  });
+}
+
+function startTracking() {
+  if (!navigator.geolocation) {
+    addLog('เบราว์เซอร์นี้ไม่รองรับ GPS', 'err');
+    return;
+  }
+
+  isRunning = true;
+  document.getElementById('btnStart').className = 'btn btn-disabled';
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').className = 'btn btn-stop';
+  document.getElementById('btnStop').disabled = false;
+  setStatus('active', 'กำลังติดตาม...');
+  addLog('เริ่มติดตามแล้ว');
+
+  watchId = navigator.geolocation.watchPosition(
+    pos => { currentPos = pos; },
+    err => { addLog('GPS error: ' + err.message, 'err'); setStatus('error', 'GPS ผิดพลาด'); },
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  );
+
+  sendLocation();
+  intervalId = setInterval(() => {
+    updateTimeBadge();
+    sendLocation();
+  }, INTERVAL_MS);
+
+  setInterval(updateTimeBadge, 60000);
+}
+
+function stopTracking() {
+  isRunning = false;
+  clearInterval(intervalId);
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  document.getElementById('btnStart').className = 'btn btn-start';
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnStop').className = 'btn btn-disabled';
+  document.getElementById('btnStop').disabled = true;
+  setStatus('', 'หยุดแล้ว');
+  addLog('หยุดติดตามแล้ว');
+}
+
+updateTimeBadge();
+</script>
+</body>
+</html>
