@@ -206,11 +206,17 @@ if (!isNaN(pLat) && !isNaN(pLon)) {
   updateDisplay(pLat, pLon, null);
 }
 
-// 2. Geolocation (ทำงานถ้าเปิดผ่าน HTTPS หรือ localhost)
-if ('geolocation' in navigator) {
-  navigator.geolocation.watchPosition(
+// 2. Geolocation — ดึงทุก 5 วินาที
+const GPS_INTERVAL = 5000;
+
+function fetchGPS() {
+  if (!('geolocation' in navigator)) {
+    if (isNaN(pLat)) setGpsStatus('yellow', 'ใช้ Shortcut หรือใส่พิกัดเองด้านล่าง');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
     pos => {
-      setGpsStatus('green', 'GPS ✓ (อัพเดทอัตโนมัติ)');
+      setGpsStatus('green', 'GPS ✓ (อัพเดททุก 5 วิ)');
       updateDisplay(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
     },
     err => {
@@ -219,11 +225,12 @@ if ('geolocation' in navigator) {
         setGpsStatus('yellow', msgs[err.code] || 'GPS Error');
       }
     },
-    { enableHighAccuracy: true, maximumAge: 3000, timeout: 8000 }
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
   );
-} else {
-  if (isNaN(pLat)) setGpsStatus('yellow', 'ใช้ Shortcut หรือใส่พิกัดเองด้านล่าง');
 }
+
+fetchGPS();
+setInterval(fetchGPS, GPS_INTERVAL);
 
 function calcManual() {
   const raw = document.getElementById('manualInput').value.trim();
