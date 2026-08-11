@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>LoRa Range Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+  h1 { font-size: 1.1rem; color: #94a3b8; margin-bottom: 24px; letter-spacing: 0.05em; }
+
+  .card {
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 16px;
+  }
+
+  .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+
+  .distance-value {
+    font-size: 4rem;
+    font-weight: 700;
+    color: #38bdf8;
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+  .distance-unit { font-size: 1.2rem; color: #64748b; margin-top: 4px; }
+
+  .distance-km {
+    font-size: 1.4rem;
+    color: #7dd3fc;
+    margin-top: 8px;
+  }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #334155;
+  }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot.green { background: #22c55e; box-shadow: 0 0 8px #22c55e; animation: pulse 2s infinite; }
+  .dot.yellow { background: #eab308; }
+  .dot.red { background: #ef4444; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .status-text { font-size: 0.85rem; color: #94a3b8; }
+
+  .coords-box {
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .coords-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .coords-key { font-size: 0.8rem; color: #64748b; }
+  .coords-val { font-size: 0.8rem; color: #cbd5e1; font-family: monospace; }
+
+  .accuracy-badge {
+    display: inline-block;
+    background: #1e3a5f;
+    color: #60a5fa;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-top: 8px;
+  }
+
+  .manual-section { width: 100%; max-width: 400px; }
+  .manual-title {
+    font-size: 0.75rem; color: #475569;
+    text-align: center; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .manual-title::before, .manual-title::after {
+    content: ''; flex: 1; height: 1px; background: #1e293b;
+  }
+  .input-row { display: flex; gap: 8px; }
+  input[type="text"] {
+    flex: 1;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    color: #e2e8f0;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: #38bdf8; }
+  input[type="text"]::placeholder { color: #475569; }
+  button.calc-btn {
+    background: #0369a1;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button.calc-btn:active { background: #0284c7; }
+
+  .error-msg { color: #f87171; font-size: 0.8rem; margin-top: 6px; display: none; }
+</style>
+</head>
+<body>
+
+<h1>⚡ LoRaWAN Range Test</h1>
+
+<!-- Distance Card -->
+<div class="card">
+  <div class="label">การกระจัดจาก Gateway</div>
+  <div class="distance-value" id="distM">—</div>
+  <div class="distance-unit">เมตร</div>
+  <div class="distance-km" id="distKm"></div>
+
+  <div class="status-bar">
+    <div class="dot" id="gpsDot" style="background:#334155"></div>
+    <div class="status-text" id="gpsStatus">กำลังขอ GPS...</div>
+  </div>
+  <div style="margin-top:8px; font-size:0.78rem; color:#94a3b8" id="lastUpdate"></div>
+</div>
+
+<!-- Coordinates Card -->
+<div class="card">
+  <div class="label">พิกัดปัจจุบัน</div>
+  <div class="coords-box">
+    <div class="coords-row">
+      <span class="coords-key">Latitude</span>
+      <span class="coords-val" id="myLat">—</span>
+    </div>
+    <div class="coords-row">
+      <span class="coords-key">Longitude</span>
+      <span class="coords-val" id="myLon">—</span>
+    </div>
+    <div class="coords-row">
+      <span class="coords-key">GW (ref)</span>
+      <span class="coords-val">13.582077, 100.692121</span>
+    </div>
+    <div id="accBadge"></div>
+  </div>
+</div>
+
+<!-- Manual Input -->
+<div class="manual-section">
+  <div class="manual-title">หรือใส่พิกัดเอง</div>
+  <div class="input-row">
+    <input type="text" id="manualInput" placeholder="13.5891, 100.6955">
+    <button class="calc-btn" onclick="calcManual()">คำนวณ</button>
+  </div>
+  <div class="error-msg" id="errMsg">รูปแบบผิด — ตัวอย่าง: 13.5891, 100.6955</div>
+</div>
+
+<script>
+const GW_LAT = 13.582076728394181;
+const GW_LON = 100.6921211930655;
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function updateDisplay(lat, lon, accuracy) {
+  const dist = haversine(GW_LAT, GW_LON, lat, lon);
+  document.getElementById('distM').textContent = Math.round(dist).toLocaleString();
+  document.getElementById('distKm').textContent = (dist / 1000).toFixed(3) + ' km';
+  document.getElementById('myLat').textContent = lat.toFixed(7);
+  document.getElementById('myLon').textContent = lon.toFixed(7);
+  if (accuracy !== null) {
+    document.getElementById('accBadge').innerHTML = `<span class="accuracy-badge">±${Math.round(accuracy)} m</span>`;
+  }
+  const now = new Date();
+  const t = now.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  document.getElementById('lastUpdate').textContent = `อัพเดทล่าสุด ${t}`;
+}
+
+function setGpsStatus(state, text) {
+  const dot = document.getElementById('gpsDot');
+  dot.className = 'dot ' + state;
+  document.getElementById('gpsStatus').textContent = text;
+}
+
+// 1. รับพิกัดจาก URL params (ส่งมาจาก iPhone Shortcut)
+const urlParams = new URLSearchParams(window.location.search);
+const pLat = parseFloat(urlParams.get('lat'));
+const pLon = parseFloat(urlParams.get('lon'));
+if (!isNaN(pLat) && !isNaN(pLon)) {
+  setGpsStatus('green', 'GPS จาก Shortcut ✓');
+  updateDisplay(pLat, pLon, null);
+}
+
+// 2. Geolocation — ดึงทุก 5 วินาที
+const GPS_INTERVAL = 5000;
+
+function fetchGPS() {
+  if (!('geolocation' in navigator)) {
+    if (isNaN(pLat)) setGpsStatus('yellow', 'ใช้ Shortcut หรือใส่พิกัดเองด้านล่าง');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      setGpsStatus('green', 'GPS ✓ (อัพเดททุก 5 วิ)');
+      updateDisplay(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+    },
+    err => {
+      if (isNaN(pLat)) {
+        const msgs = {1:'ไม่อนุญาต GPS — ใช้ Shortcut หรือใส่เอง', 2:'หา GPS ไม่เจอ', 3:'หมดเวลา'};
+        setGpsStatus('yellow', msgs[err.code] || 'GPS Error');
+      }
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 }
+  );
+}
+
+fetchGPS();
+setInterval(fetchGPS, GPS_INTERVAL);
+
+function calcManual() {
+  const raw = document.getElementById('manualInput').value.trim();
+  const err = document.getElementById('errMsg');
+  const parts = raw.split(/[\s,]+/).filter(Boolean);
+  if (parts.length < 2) { err.style.display='block'; return; }
+  const lat = parseFloat(parts[0]);
+  const lon = parseFloat(parts[1]);
+  if (isNaN(lat) || isNaN(lon)) { err.style.display='block'; return; }
+  err.style.display = 'none';
+  setGpsStatus('yellow', 'ใช้พิกัดที่ใส่เอง');
+  updateDisplay(lat, lon, null);
+}
+
+document.getElementById('manualInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') calcManual();
+});
+</script>
+</body>
+</html>
